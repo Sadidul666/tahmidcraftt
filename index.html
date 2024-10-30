@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SadidulCraft</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: #222;
+            position: relative;
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            border: 1px solid #fff;
+            position: relative;
+            z-index: 1; /* Ensure canvas is above watermark */
+        }
+        .controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 10;
+            display: flex;
+            flex-wrap: wrap;
+        }
+        button {
+            margin: 5px;
+            padding: 10px;
+            background-color: #444;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        button:hover {
+            background-color: #555;
+        }
+        .watermark {
+            position: absolute;
+            top: 50%; /* Center vertically */
+            left: 50%; /* Center horizontally */
+            color: white;
+            opacity: 0.1; /* Low opacity for watermark */
+            font-size: 60px; /* Larger font size */
+            pointer-events: none; /* Prevent interactions */
+            z-index: 0; /* Keep it behind canvas */
+            transform: translate(-50%, -50%); /* Center the watermark */
+            text-align: center; /* Center align text */
+        }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <button onclick="setMaterial('sand')">Sand</button>
+        <button onclick="setMaterial('fire')">Fire</button>
+        <button onclick="setMaterial('water')">Water</button>
+        <button onclick="setMaterial('smoke')">Smoke</button>
+        <button onclick="setMaterial('ice')">Ice</button>
+        <button onclick="setMaterial('ash')">Ash</button>
+        <button onclick="setMaterial('mud')">Mud</button>
+        <button onclick="setMaterial('lava')">Lava</button>
+        <button onclick="setMaterial('bubble')">Bubble</button>
+        <button onclick="setMaterial('stone')">Stone</button>
+        <button onclick="setMaterial('grass')">Grass</button>
+        <button onclick="setMaterial('wood')">Wood</button>
+        <button onclick="setMaterial('metal')">Metal</button>
+    </div>
+    <canvas id="canvas"></canvas>
+    <div class="watermark">Made by Sadidul Abrar</div>
+    
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        const textures = {
+            sand: createPattern('#e3b27c'),
+            fire: createPattern('rgba(255, 165, 0, 0.8)', true),
+            water: createPattern('rgba(0, 191, 255, 0.5)', true),
+            smoke: createPattern('rgba(169, 169, 169, 0.5)', true),
+            ice: createPattern('rgba(173, 216, 230, 0.8)', true),
+            ash: createPattern('#808080'),
+            mud: createPattern('#7B3F00'),
+            lava: createPattern('rgba(255, 69, 0, 0.7)', true),
+            bubble: createPattern('rgba(135, 206, 250, 0.6)', true),
+            stone: createPattern('#A9A9A9'),
+            grass: createPattern('#7CFC00'),
+            wood: createPattern('#8B4513'),
+            metal: createPattern('#C0C0C0'),
+        };
+
+        let particles = [];
+        let currentMaterial = 'sand';
+        let isDrawing = false;
+
+        function createPattern(color, isGradient = false) {
+            const canvasPattern = document.createElement('canvas');
+            const ctxPattern = canvasPattern.getContext('2d');
+            canvasPattern.width = 20;
+            canvasPattern.height = 20;
+            if (isGradient) {
+                const gradient = ctxPattern.createRadialGradient(10, 10, 5, 10, 10, 15);
+                gradient.addColorStop(0, color);
+                gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                ctxPattern.fillStyle = gradient;
+            } else {
+                ctxPattern.fillStyle = color;
+            }
+            ctxPattern.fillRect(0, 0, canvasPattern.width, canvasPattern.height);
+            return ctx.createPattern(canvasPattern, 'repeat');
+        }
+
+        class Particle {
+            constructor(x, y, type) {
+                this.x = Math.floor(x / 10) * 10; // Snap to grid
+                this.y = Math.floor(y / 10) * 10; // Snap to grid
+                this.type = type;
+                this.size = 10; // Fixed size for pixelated effect
+                this.texture = textures[this.type];
+                this.velocityY = 0;
+                this.isStatic = false;
+                this.colorVariation = Math.floor(Math.random() * 20); // Slight variation in color
+            }
+
+            update() {
+                if (!this.isStatic) {
+                    this.velocityY += this.getGravity(); // Apply gravity
+                    this.y += this.velocityY;
+
+                    // Check for collision with bottom
+                    if (this.y + this.size >= canvas.height) {
+                        this.y = canvas.height - this.size;
+                        this.isStatic = true; // Mark as static on collision
+                        this.velocityY = 0; // Stop falling
+                    }
+
+                    // Check for interactions
+                    this.checkInteractions();
+                } else {
+                    // Check if it needs to interact with other static particles
+                    this.checkStaticInteractions();
+                }
+            }
+
+            getGravity() {
+                switch (this.type) {
+                    case 'sand': return 0.5; // Falls slowly
+                    case 'fire': return -0.2; // Rises slowly
+                    case 'water': return 0.3; // Falls slowly
+                    case 'smoke': return -0.5; // Rises slowly
+                    case 'ice': return 0.1; // Falls slowly
+                    case 'ash': return -0.1; // Light, floats upwards
+                    case 'mud': return 0.7; // Falls quickly, sticks
+                    case 'lava': return 0.2; // Falls slowly, thicker
+                    case 'bubble': return -0.2; // Bubbles rise
+                    case 'stone': return 1; // Falls straight down
+                    case 'grass': return 0.5; // Falls slowly
+                    case 'wood': return 0.4; // Falls slowly
+                    case 'metal': return 0.2; // Falls straight down
+                    default: return 0;
+                }
+            }
+
+            checkInteractions() {
+                for (let other of particles) {
+                    if (other !== this && other.isStatic && this.isColliding(other)) {
+                        this.interactWith(other);
+                    }
+                }
+            }
+
+            checkStaticInteractions() {
+                for (let other of particles) {
+                    if (other !== this && other.isStatic && this.isColliding(other)) {
+                        // Adjust position if overlapping
+                        this.y = other.y - this.size; // Move above the static particle
+                        this.isStatic = true; // Mark as static
+                        break; // No need to check other particles
+                    }
+                }
+            }
+
+            interactWith(other) {
+                switch (this.type) {
+                    case 'lava':
+                        if (other.type === 'ice') {
+                            other.isStatic = true; // Ice melts into water
+                            particles.push(new Particle(other.x, other.y, 'water'));
+                        } else if (other.type === 'wood') {
+                            other.isStatic = true; // Wood burns
+                            particles.push(new Particle(other.x, other.y, 'ash'));
+                        } else if (other.type === 'grass') {
+                            other.isStatic = true; // Grass burns
+                            particles.push(new Particle(other.x, other.y, 'ash'));
+                        }
+                        break;
+
+                    case 'water':
+                        if (other.type === 'lava') {
+                            other.isStatic = true; // Lava turns into stone
+                            particles.push(new Particle(other.x, other.y, 'stone'));
+                        }
+                        break;
+
+                    case 'fire':
+                        if (other.type === 'wood') {
+                            other.isStatic = true; // Wood burns
+                            particles.push(new Particle(other.x, other.y, 'ash'));
+                        }
+                        break;
+                    
+                    // Add other interactions as needed
+                }
+            }
+
+            isColliding(other) {
+                return this.x < other.x + other.size && 
+                       this.x + this.size > other.x && 
+                       this.y < other.y + other.size && 
+                       this.y + this.size > other.y;
+            }
+
+            draw() {
+                ctx.fillStyle = this.texture; // Set the texture based on the type
+                ctx.fillRect(this.x, this.y, this.size, this.size);
+            }
+        }
+
+        function setMaterial(material) {
+            currentMaterial = material;
+        }
+
+        // Touch events for mobile
+        canvas.addEventListener('touchstart', (event) => {
+            isDrawing = true;
+            const touch = event.touches[0];
+            particles.push(new Particle(touch.clientX, touch.clientY, currentMaterial));
+        });
+
+        canvas.addEventListener('touchend', () => {
+            isDrawing = false;
+        });
+
+        canvas.addEventListener('touchmove', (event) => {
+            if (isDrawing) {
+                const touch = event.touches[0];
+                particles.push(new Particle(touch.clientX, touch.clientY, currentMaterial));
+            }
+        });
+
+        // Mouse events for desktop
+        canvas.addEventListener('mousedown', () => {
+            isDrawing = true;
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            isDrawing = false;
+        });
+
+        canvas.addEventListener('mousemove', (event) => {
+            if (isDrawing) {
+                particles.push(new Particle(event.clientX, event.clientY, currentMaterial));
+            }
+        });
+
+        function update() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            for (let particle of particles) {
+                particle.update();
+                particle.draw();
+            }
+            requestAnimationFrame(update);
+        }
+
+        update();
+    </script>
+</body>
+</html>
